@@ -1,3 +1,4 @@
+from .argocd_client import ArgoCDHttpClient
 from .sentinel import (
     DevOpsSentinel,
     GitHubContext,
@@ -11,6 +12,7 @@ from .sentinel import (
 )
 
 __all__ = [
+    "ArgoCDHttpClient",
     "DevOpsSentinel",
     "GitHubContext",
     "InMemoryJiraClient",

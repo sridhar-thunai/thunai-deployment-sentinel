@@ -1,0 +1,47 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/sridhar-thunai/thunai-deployment-sentinel
+  pullPolicy: IfNotPresent
+  tag: ""  # defaults to Chart.appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+
+# ArgoCD configuration
+argocd:
+  # ArgoCD server URL — required
+  server: "https://argocd-server.argocd.svc.cluster.local"
+  # List of ArgoCD application names to watch
+  applications:
+    - checkout-service
+  # Polling interval in seconds
+  pollIntervalSeconds: 30
+  # Skip TLS verification (set true only for self-signed certs in dev/staging)
+  insecureTlsSkipVerify: false
+
+# Credentials — reference an existing Secret created outside this chart.
+# The Secret must contain keys: ARGOCD_TOKEN
+existingSecret: "thunai-sentinel-credentials"
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

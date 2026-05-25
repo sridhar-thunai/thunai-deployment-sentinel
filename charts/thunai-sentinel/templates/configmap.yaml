@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thunai-sentinel.fullname" . }}
+  labels:
+    {{- include "thunai-sentinel.labels" . | nindent 4 }}
+data:
+  ARGOCD_SERVER: {{ .Values.argocd.server | quote }}
+  POLL_INTERVAL: {{ .Values.argocd.pollIntervalSeconds | quote }}
+  WATCHED_APPS: {{ join "," .Values.argocd.applications | quote }}
+  INSECURE_TLS: {{ .Values.argocd.insecureTlsSkipVerify | quote }}

@@ -1,0 +1,11 @@
+1. Deployed {{ include "checkout-service.fullname" . }}
+
+   Application URL (inside cluster):
+     http://{{ include "checkout-service.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+   To port-forward locally:
+     kubectl port-forward svc/{{ include "checkout-service.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+     open http://localhost:8080
+
+   Current image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+   Replicas:      {{ .Values.replicaCount }}

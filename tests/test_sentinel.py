@@ -1,9 +1,10 @@
+import json
 import unittest
 from contextlib import redirect_stderr
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from thunai_deployment_sentinel import DevOpsSentinel, RolloutEvent
+from thunai_deployment_sentinel import ArgoCDHttpClient, DevOpsSentinel, RolloutEvent
 from thunai_deployment_sentinel.__main__ import main
 
 
@@ -110,6 +111,97 @@ class DevOpsSentinelTests(unittest.TestCase):
 
         self.assertEqual(2, exit_context.exception.code)
         self.assertIn("Expected a JSON rollout event", stderr.getvalue())
+
+    def test_watch_subcommand_exits_with_error_when_server_missing(self) -> None:
+        stderr = StringIO()
+        with patch("sys.argv", ["thunai_deployment_sentinel", "watch", "checkout-service"]), \
+                redirect_stderr(stderr):
+            result = main()
+        self.assertEqual(2, result)
+        self.assertIn("ARGOCD_SERVER", stderr.getvalue())
+
+    def test_watch_subcommand_exits_with_error_when_token_missing(self) -> None:
+        stderr = StringIO()
+        with patch("sys.argv", [
+            "thunai_deployment_sentinel", "watch",
+            "--argocd-server", "https://argocd.example.com",
+            "checkout-service",
+        ]), redirect_stderr(stderr):
+            result = main()
+        self.assertEqual(2, result)
+        self.assertIn("ARGOCD_TOKEN", stderr.getvalue())
+
+
+class ArgoCDHttpClientTests(unittest.TestCase):
+    _HEALTHY_APP = {
+        "spec": {"destination": {"namespace": "checkout-service"}},
+        "status": {
+            "sync": {"revision": "abc123", "status": "Synced"},
+            "health": {"status": "Healthy"},
+            "operationState": {"phase": "Succeeded"},
+        },
+    }
+    _DEGRADED_APP = {
+        "spec": {"destination": {"namespace": "checkout-service"}},
+        "status": {
+            "sync": {"revision": "def456", "status": "OutOfSync"},
+            "health": {"status": "Degraded"},
+            "operationState": {"phase": "Failed"},
+        },
+    }
+
+    def _client_with_mock(self, response_body: dict) -> tuple[ArgoCDHttpClient, MagicMock]:
+        client = ArgoCDHttpClient(server_url="https://argocd.example.com", token="test-token")
+        mock_request = MagicMock(return_value=response_body)
+        client._request = mock_request
+        return client, mock_request
+
+    def test_get_rollout_event_maps_healthy_app(self) -> None:
+        client, _ = self._client_with_mock(self._HEALTHY_APP)
+        event = client.get_rollout_event("checkout-service")
+
+        self.assertEqual("checkout-service", event.application)
+        self.assertEqual("checkout-service", event.environment)
+        self.assertEqual("abc123", event.revision)
+        self.assertEqual("Succeeded", event.status)
+        self.assertEqual("Healthy", event.health_status)
+
+    def test_get_rollout_event_maps_degraded_app(self) -> None:
+        client, _ = self._client_with_mock(self._DEGRADED_APP)
+        event = client.get_rollout_event("checkout-service")
+
+        self.assertEqual("Failed", event.status)
+        self.assertEqual("Degraded", event.health_status)
+        self.assertEqual("def456", event.revision)
+
+    def test_pause_sync_removes_automated_policy(self) -> None:
+        app_with_auto_sync = {
+            "spec": {
+                "destination": {"namespace": "checkout-service"},
+                "syncPolicy": {"automated": {"prune": True, "selfHeal": True}},
+            },
+            "status": self._HEALTHY_APP["status"],
+        }
+        client = ArgoCDHttpClient(server_url="https://argocd.example.com", token="test-token")
+        responses = iter([app_with_auto_sync, {}])
+        client._request = MagicMock(side_effect=lambda *a, **kw: next(responses))
+
+        client.pause_sync("checkout-service")
+
+        patch_call = client._request.call_args_list[1]
+        patched_body = patch_call[0][2]
+        self.assertNotIn("automated", patched_body.get("spec", {}).get("syncPolicy", {}))
+
+    def test_get_rollout_event_integrates_with_sentinel_for_regression(self) -> None:
+        client, _ = self._client_with_mock(self._DEGRADED_APP)
+        sentinel = DevOpsSentinel()
+
+        event = client.get_rollout_event("checkout-service")
+        decision = sentinel.evaluate_rollout(event)
+
+        self.assertTrue(decision.regression_detected)
+        self.assertIn("ArgoCD rollout status is failed", decision.reasons)
+        self.assertIn("ArgoCD health status is degraded", decision.reasons)
 
 
 if __name__ == "__main__":
