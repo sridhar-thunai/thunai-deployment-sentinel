@@ -165,10 +165,10 @@ class DevOpsSentinel:
         health_status = rollout.health_status.lower()
 
         if rollout_status in self.config.unhealthy_rollout_statuses:
-            reasons.append(f"ArgoCD rollout status is {rollout.status}")
+            reasons.append(f"ArgoCD rollout status is {rollout_status}")
 
         if health_status != "healthy":
-            reasons.append(f"ArgoCD health status is {rollout.health_status}")
+            reasons.append(f"ArgoCD health status is {health_status}")
 
         error_rate_delta = rollout.error_rate - rollout.baseline_error_rate
         if error_rate_delta >= self.config.error_rate_delta_threshold:

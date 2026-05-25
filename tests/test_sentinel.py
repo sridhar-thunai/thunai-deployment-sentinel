@@ -52,8 +52,8 @@ class DevOpsSentinelTests(unittest.TestCase):
         )
 
         self.assertTrue(decision.regression_detected)
-        self.assertIn("ArgoCD rollout status is Degraded", decision.reasons)
-        self.assertIn("ArgoCD health status is Degraded", decision.reasons)
+        self.assertIn("ArgoCD rollout status is degraded", decision.reasons)
+        self.assertIn("ArgoCD health status is degraded", decision.reasons)
         self.assertIn("Error rate increased from 1.00% to 12.00%", decision.reasons)
         self.assertIn("Latency increased from 150ms to 450ms", decision.reasons)
         self.assertEqual("def456", decision.github_context.commit)
