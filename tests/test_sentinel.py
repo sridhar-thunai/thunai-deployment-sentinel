@@ -1,6 +1,10 @@
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
+from unittest.mock import patch
 
 from thunai_deployment_sentinel import DevOpsSentinel, RolloutEvent
+from thunai_deployment_sentinel.__main__ import main
 
 
 class DevOpsSentinelTests(unittest.TestCase):
@@ -78,6 +82,34 @@ class DevOpsSentinelTests(unittest.TestCase):
 
         self.assertEqual("approved", approved_decision.rollback_workflow.status)
         self.assertEqual("ops-oncall", approved_decision.rollback_workflow.approved_by)
+
+    def test_zero_latency_baseline_can_still_trigger_regression(self) -> None:
+        decision = self.sentinel.evaluate_rollout(
+            RolloutEvent(
+                application="payments",
+                environment="prod",
+                revision="ghi789",
+                status="Succeeded",
+                health_status="Healthy",
+                latency_ms=300,
+                baseline_latency_ms=0,
+            )
+        )
+
+        self.assertTrue(decision.regression_detected)
+        self.assertIn("Latency increased from 0ms to 300ms", decision.reasons)
+
+    def test_cli_reports_invalid_rollout_payload_clearly(self) -> None:
+        stderr = StringIO()
+        with patch("sys.argv", ["thunai_deployment_sentinel"]), patch(
+            "thunai_deployment_sentinel.__main__.stdin.read",
+            return_value="{\"application\": \"payments\"}",
+        ), redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as exit_context:
+                main()
+
+        self.assertEqual(2, exit_context.exception.code)
+        self.assertIn("Expected a JSON rollout event", stderr.getvalue())
 
 
 if __name__ == "__main__":

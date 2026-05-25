@@ -14,8 +14,22 @@ def main() -> int:
     parser.add_argument("event_file", nargs="?", help="Path to a JSON file containing a rollout event")
     args = parser.parse_args()
 
-    raw_payload = Path(args.event_file).read_text() if args.event_file else stdin.read()
-    rollout = RolloutEvent(**json.loads(raw_payload))
+    try:
+        raw_payload = Path(args.event_file).read_text() if args.event_file else stdin.read()
+    except OSError as error:
+        parser.exit(
+            2,
+            f"Unable to read rollout event input for the deployment sentinel: {error}\n",
+        )
+
+    try:
+        rollout = RolloutEvent(**json.loads(raw_payload))
+    except (json.JSONDecodeError, TypeError) as error:
+        parser.exit(
+            2,
+            "Expected a JSON rollout event with fields such as application, environment, revision, "
+            f"status, and health_status. Error: {error}\n",
+        )
 
     sentinel = DevOpsSentinel(
         github_context_provider=SimpleGitHubContextProvider(),

@@ -60,6 +60,7 @@ class SentinelDecision:
 class SentinelConfig:
     error_rate_delta_threshold: float = 0.03
     latency_increase_ratio_threshold: float = 1.5
+    zero_baseline_latency_threshold_ms: float = 250.0
     unhealthy_rollout_statuses: tuple[str, ...] = ("degraded", "failed", "error")
 
 
@@ -183,5 +184,10 @@ class DevOpsSentinel:
                     "Latency increased "
                     f"from {rollout.baseline_latency_ms:.0f}ms to {rollout.latency_ms:.0f}ms"
                 )
+        elif rollout.latency_ms >= self.config.zero_baseline_latency_threshold_ms:
+            reasons.append(
+                "Latency increased "
+                f"from {rollout.baseline_latency_ms:.0f}ms to {rollout.latency_ms:.0f}ms"
+            )
 
         return reasons
