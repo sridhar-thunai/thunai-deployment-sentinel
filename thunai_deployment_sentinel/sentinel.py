@@ -79,7 +79,7 @@ class JiraClient(Protocol):
 
 class SimpleGitHubContextProvider:
     def enrich(self, rollout: RolloutEvent, reasons: Sequence[str]) -> GitHubContext:
-        pull_requests = tuple(rollout.affected_pull_requests)
+        pull_requests = rollout.affected_pull_requests
         pr_summary = ", ".join(pull_requests) if pull_requests else "no linked pull requests"
         summary = (
             f"Revision {rollout.revision} for {rollout.application} in {rollout.environment} "
