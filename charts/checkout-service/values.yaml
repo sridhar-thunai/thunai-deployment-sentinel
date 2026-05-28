@@ -78,6 +78,6 @@ affinity: {}
 rollback:
   enabled: true
   # Image with kubectl available
-  image: bitnami/kubectl:1.28
+  image: bitnami/kubectl:latest
   # Seconds to wait for the rollout before declaring failure and rolling back
   timeoutSeconds: 360
