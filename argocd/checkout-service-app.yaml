@@ -10,30 +10,36 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/sridhar-thunai/thunai-deployment-sentinel
+    repoURL: https://github.com/sridhar-thunai/thunai-deployment-sentinel.git
     targetRevision: main
     path: charts/checkout-service
     helm:
       valueFiles:
         - values.yaml
+      parameters:
+        # Override autoscaling flag; HPA is managed externally on this cluster
+        - name: autoscaling.enabled
+          value: "true"
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: checkout-service
+    # Must match the namespace where the service actually runs
+    namespace: checkout
 
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
+      - ServerSideApply=true
       - CreateNamespace=true
-      - PrunePropagationPolicy=foreground
+      - Validate=false
     retry:
       limit: 3
       backoff:
-        duration: 10s
+        duration: 30s
         factor: 2
-        maxDuration: 3m
+        maxDuration: 5m
 
-  # Sentinel watches health here — keep revisionHistoryLimit > 0 for rollback
-  revisionHistoryLimit: 5
+  # Keep enough history for the rollback hook to find the previous good revision
+  revisionHistoryLimit: 10

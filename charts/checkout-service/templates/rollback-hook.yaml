@@ -1,0 +1,123 @@
+{{- if .Values.rollback.enabled }}
+# PostSync hook Job — runs after every ArgoCD sync.
+#
+# What it does:
+#   1. Waits up to .Values.rollback.timeoutSeconds for the Deployment rollout to
+#      become healthy (all pods pass readiness probes).
+#   2. SUCCESS → exits 0; ArgoCD marks the sync Succeeded.
+#   3. FAILURE → runs `kubectl rollout undo` to restore the previous ReplicaSet,
+#      then patches the ArgoCD Application's targetRevision to the last successful
+#      git commit so that selfHeal re-deploys the previous healthy build rather
+#      than the broken one.
+#
+# Lifecycle:
+#   - hook: PostSync  — created after all Sync-phase resources are applied.
+#   - delete-policy: HookSucceeded — deleted automatically on success.
+#     Failed jobs are kept for 24 h so engineers can inspect logs.
+#   - backoffLimit: 0 — no retries; one clean pass per sync.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "checkout-service.fullname" . }}-rollback-check
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "checkout-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rollback-hook
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    # Delete this job automatically when it succeeds.
+    # Failed jobs are kept for debugging (ttlSecondsAfterFinished cleans them after 24 h).
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        {{- include "checkout-service.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: rollback-hook
+    spec:
+      serviceAccountName: {{ include "checkout-service.fullname" . }}-rollback
+      restartPolicy: Never
+      containers:
+        - name: rollback-check
+          image: {{ .Values.rollback.image }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eo pipefail
+
+              DEPLOYMENT="{{ include "checkout-service.fullname" . }}"
+              NAMESPACE="{{ .Release.Namespace }}"
+              APP_NAME="{{ include "checkout-service.fullname" . }}"
+              ARGOCD_NS="argocd"
+              TIMEOUT="{{ .Values.rollback.timeoutSeconds }}"
+
+              log() { echo "[$(date -Iseconds)] $*"; }
+
+              log "PostSync rollback check started."
+              log "  Deployment : $NAMESPACE/$DEPLOYMENT"
+              log "  ArgoCD App : $ARGOCD_NS/$APP_NAME"
+              log "  Timeout    : ${TIMEOUT}s"
+
+              # ── Step 1: Wait for the rollout ─────────────────────────────
+              if kubectl rollout status deployment/"$DEPLOYMENT" \
+                  -n "$NAMESPACE" \
+                  --timeout="${TIMEOUT}s"; then
+                log "SUCCESS: Deployment is healthy. No rollback needed."
+                exit 0
+              fi
+
+              # ── Step 2: Rollback the Kubernetes Deployment ───────────────
+              log "FAILURE: Deployment did not become healthy within ${TIMEOUT}s."
+              log "Running: kubectl rollout undo deployment/$DEPLOYMENT -n $NAMESPACE"
+              kubectl rollout undo deployment/"$DEPLOYMENT" -n "$NAMESPACE"
+
+              log "Waiting up to 120 s for the rolled-back ReplicaSet to stabilise..."
+              kubectl rollout status deployment/"$DEPLOYMENT" \
+                -n "$NAMESPACE" --timeout=120s \
+                && log "Rolled-back deployment is now healthy." \
+                || log "WARNING: Rolled-back deployment is also unstable. Manual intervention may be required."
+
+              # ── Step 3: Pin ArgoCD to the previous good git revision ─────
+              # Kubernetes rollout undo restores the previous ReplicaSet, but
+              # ArgoCD's selfHeal:true would re-apply the bad manifest from git
+              # unless we also update the Application's targetRevision.
+              #
+              # We read the second-to-last entry from ArgoCD's deployment history
+              # (the most-recent entry is the one that just failed).
+              log "Looking up previous healthy revision in ArgoCD history..."
+              PREV_REVISION=$(kubectl get application "$APP_NAME" \
+                -n "$ARGOCD_NS" \
+                -o jsonpath='{range .status.history[*]}{.revision}{"\n"}{end}' \
+                2>/dev/null | tail -n 2 | head -n 1)
+
+              if [ -n "$PREV_REVISION" ] && [ "$PREV_REVISION" != "null" ]; then
+                log "Pinning ArgoCD Application to previous revision: $PREV_REVISION"
+                kubectl patch application "$APP_NAME" \
+                  -n "$ARGOCD_NS" \
+                  --type=merge \
+                  -p "{\"spec\":{\"source\":{\"targetRevision\":\"$PREV_REVISION\"}}}"
+                log "ArgoCD will now sync from the previous healthy commit."
+                log "Once the broken commit is fixed, restore targetRevision to 'main'."
+              else
+                log "WARNING: Could not determine previous revision from ArgoCD history."
+                log "Disabling automated sync to prevent selfHeal from re-applying the bad state."
+                kubectl patch application "$APP_NAME" \
+                  -n "$ARGOCD_NS" \
+                  --type=merge \
+                  -p '{"spec":{"syncPolicy":{"automated":null}}}'
+                log "Automated sync disabled. Re-enable it manually after fixing the issue."
+              fi
+
+              log "Rollback procedure complete. Exiting with code 1 to mark this sync as FAILED in ArgoCD."
+              exit 1
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+{{- end }}

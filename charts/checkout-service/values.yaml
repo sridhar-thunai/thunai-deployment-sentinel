@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository
+  repository: nginx
   pullPolicy: IfNotPresent
   tag: "alpine"
 
@@ -70,3 +70,14 @@ autoscaling:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Automatic rollback hook — triggered as a PostSync ArgoCD hook.
+# If the deployment rollout does not become healthy within timeoutSeconds,
+# the hook runs `kubectl rollout undo` and pins the ArgoCD Application back
+# to the last known-good git revision so selfHeal does not re-apply the bad state.
+rollback:
+  enabled: true
+  # Image with kubectl available
+  image: bitnami/kubectl:1.28
+  # Seconds to wait for the rollout before declaring failure and rolling back
+  timeoutSeconds: 360

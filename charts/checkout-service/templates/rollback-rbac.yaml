@@ -1,0 +1,53 @@
+{{- if .Values.rollback.enabled }}
+# ServiceAccount used by the PostSync rollback hook Job.
+# This is a regular (non-hook) resource so it persists between syncs.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "checkout-service.fullname" . }}-rollback
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "checkout-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rollback-hook
+---
+# ClusterRole: grants the minimum permissions the rollback Job needs.
+#   - Read/patch Deployments & ReplicaSets in the release namespace (rollout undo)
+#   - Read/patch the ArgoCD Application resource (pin to previous revision)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "checkout-service.fullname" . }}-rollback
+  labels:
+    {{- include "checkout-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rollback-hook
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+    # Scope to this specific deployment only
+    resourceNames: ["{{ include "checkout-service.fullname" . }}"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "patch"]
+    # Scope to this specific ArgoCD application only
+    resourceNames: ["{{ include "checkout-service.fullname" . }}"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "checkout-service.fullname" . }}-rollback
+  labels:
+    {{- include "checkout-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rollback-hook
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "checkout-service.fullname" . }}-rollback
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "checkout-service.fullname" . }}-rollback
+    namespace: {{ .Release.Namespace }}
+{{- end }}
