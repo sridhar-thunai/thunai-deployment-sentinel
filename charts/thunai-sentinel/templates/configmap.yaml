@@ -9,3 +9,4 @@ data:
   POLL_INTERVAL: {{ .Values.argocd.pollIntervalSeconds | quote }}
   WATCHED_APPS: {{ join "," .Values.argocd.applications | quote }}
   INSECURE_TLS: {{ .Values.argocd.insecureTlsSkipVerify | quote }}
+  DASHBOARD_PORT: {{ .Values.dashboard.port | quote }}

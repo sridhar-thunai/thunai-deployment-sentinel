@@ -8,6 +8,7 @@ from pathlib import Path
 from sys import stdin
 
 from .argocd_client import ArgoCDHttpClient
+from .dashboard import record_decision, record_error, start_dashboard
 from .sentinel import DevOpsSentinel, InMemoryJiraClient, RolloutEvent, SimpleGitHubContextProvider
 
 
@@ -73,6 +74,9 @@ def _cmd_watch(args: argparse.Namespace) -> int:
         jira_client=InMemoryJiraClient(),
     )
 
+    dashboard_port = int(os.environ.get("DASHBOARD_PORT", "8080"))
+    start_dashboard(port=dashboard_port)
+
     print(
         f"[sentinel] watching {args.applications} on {server} every {args.interval}s",
         flush=True,
@@ -83,6 +87,7 @@ def _cmd_watch(args: argparse.Namespace) -> int:
             try:
                 rollout = argocd.get_rollout_event(app_name)
                 decision = sentinel.evaluate_rollout(rollout)
+                record_decision(decision)
                 if decision.regression_detected:
                     print(
                         f"[sentinel] regression detected on {app_name} — pausing sync",
@@ -94,6 +99,7 @@ def _cmd_watch(args: argparse.Namespace) -> int:
                     print(f"[sentinel] {app_name} is healthy", flush=True)
             except Exception as exc:  # noqa: BLE001
                 print(f"[sentinel] error evaluating {app_name}: {exc}", file=sys.stderr, flush=True)
+                record_error(app_name, str(exc))
 
         time.sleep(args.interval)
 

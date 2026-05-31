@@ -18,6 +18,15 @@ podAnnotations: {}
 podSecurityContext: {}
 securityContext: {}
 
+# Dashboard HTTP server
+dashboard:
+  port: 8080
+
+# Kubernetes Service for the dashboard
+service:
+  type: LoadBalancer
+  port: 80
+
 # ArgoCD configuration
 argocd:
   # ArgoCD server URL — required
