@@ -61,7 +61,7 @@ def record_error(app_name: str, error: str) -> None:
 # HTML Dashboard (embedded — no static file server needed)
 # ---------------------------------------------------------------------------
 
-_HTML = b"""<!DOCTYPE html>
+_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -497,7 +497,7 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = self.path.split("?")[0]  # strip query string
         if path in ("/", "/index.html"):
-            self._respond(200, "text/html; charset=utf-8", _HTML)
+            self._respond(200, "text/html; charset=utf-8", _HTML.encode("utf-8"))
         elif path == "/api/status":
             with _lock:
                 payload = list(_app_statuses.values())
