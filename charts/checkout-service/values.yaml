@@ -1,9 +1,8 @@
-replicaCount: 2
 
 image:
   repository: nginx
   pullPolicy: IfNotPresent
-  tag: "alpine"
+  tag: "nginx-vv-bad"
 
 imagePullSecrets: []
 nameOverride: ""
