@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository: nginx
+  repository: nginxjkkk
   pullPolicy: IfNotPresent
   tag: "alpine"
 
