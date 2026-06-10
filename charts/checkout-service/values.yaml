@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository: nginxdsfa
+  repository: nginxsdfafdsaasfas
   pullPolicy: IfNotPresent
   tag: "alpine"
 
